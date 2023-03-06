@@ -1,0 +1,253 @@
+//@version=5
+
+////////////////////////////////////////////////////////////
+// MA
+// - 1 50/200
+// - 2 20/50/200
+// - 3 30/60/120
+// EMA
+// - 1 8/21
+// - 2 8/13/21
+// - 3 15/50/200/800
+// Fib
+// - 5 8 13 21 34 55 89 144 233 377 610
+// - 1x 2x 3x 4x 5x
+// Vegas Tunnel
+// - 12 21 55 144 169 144X-576 169X-676
+// - 2 2VT
+// - 3 3VT
+//
+////////////////////////////////////////////////////////////
+
+indicator(title='Cbsydhs', overlay=true)
+
+src = hlc3
+
+tips = 'MA\n - 1 50/200\n - 2 20/50/200\n - 3 30/60/120\nEMA\n - 1 8/21\n - 2 8/13/21\n - 3 15/50/200/800\nFib - X\nVegas Tunnel\n - 1 Lite\n - 2 2VT\n - 3 3VT'
+
+// Menue
+def = input.bool(true, '', inline='I')
+maType = input.string(title='', defval='Vegas Tunnel', options=['MA', 'EMA', 'Fib', 'Vegas Tunnel'], inline='I')
+
+MA  = maType == 'MA'           ? true : false
+EMA = maType == 'EMA'          ? true : false
+Fib = maType == 'Fib'          ? true : false
+VT  = maType == 'Vegas Tunnel' ? true : false
+
+p0 = input.int(1, title='', minval=1, tooltip=tips, inline='I')
+
+//color
+
+col_red     = #7d463b
+col_red_x   = #e38c7a
+col_green   = #606f65
+col_green_x = #83978c
+col_black   = #363c3f
+col_grey    = #8b8b8c    //#787b86
+col_white   = #f5f5f4    //#ffffff
+col_blue    = #223759    //#3d59ab
+col_purple  = #544e70    //#673ab7
+col_orange  = #ff6100
+
+col_up  = col_black
+col_dn  = col_grey
+col_sr  = col_orange
+col_w   = #965454
+col_mo  = #00a2de
+col_34  = #de7487
+
+col_long  = #009688
+col_short = #f44336
+
+col_lgl = col_purple
+col_lgs = col_red
+col_stl = col_blue
+col_sts = col_w
+
+// Fn
+
+// sma ema
+exp = maType == 'MA' ? false : true
+
+esma(len)=>
+	s = ta.sma(close, len)
+	e = ta.ema(close, len)
+	exp ? e : s
+
+// MA
+
+ma_len = def ? MA ? 1 : EMA ? 2 : Fib ? 1 : VT ? 4 : na : p0
+
+smaType = ma_len == 1 ? '50 200' : ma_len == 2 ? '20 50 200' : ma_len == 3 ? '30 60 120' : na
+emaType = ma_len == 1 ? '8 21'   : ma_len == 2 ? '8 13 21'   : ma_len == 3 ? '15 50 200 800' : na
+
+MA1 = smaType == '50 200'    ? true : false
+MA2 = smaType == '20 50 200' ? true : false
+MA3 = smaType == '30 60 120' ? true : false
+
+EMA1 = emaType == '8 21'          ? true : false
+EMA2 = emaType == '8 13 21'       ? true : false
+EMA3 = emaType == '15 50 200 800' ? true : false
+
+esma_x(x) => ma_len <= 8 ? esma(ma_len*x) : na
+
+// Vegas Tunnel 12 21 55 144 169 144X-576 169X-676
+
+var long_short = 0
+var state = 0
+vt_long = false
+vt_short = false
+
+long_short_col = col_white
+
+ema_12  = esma(12)
+ema_144 = esma(144)
+ema_169 = esma(169)
+ema_576 = esma(576)
+ema_676 = esma(676)
+
+if ema_12 > ema_144 and ema_144 > ema_169 and ema_169 > ema_576 and ema_576 > ema_676
+    long_short := 1
+    long_short_col := col_up
+    long_short_col
+else if ema_12 < ema_144 and ema_144 < ema_169 and ema_169 < ema_576 and ema_576 < ema_676
+    long_short := 2
+    long_short_col := col_w
+    long_short_col
+else
+    long_short := 0
+    long_short_col := col_white
+    long_short_col
+
+if long_short == 0
+    state := 0
+    state
+else if long_short == 1
+    if state == 0
+        if low <= ema_144 and close >= ema_12
+            vt_long := true
+            state := 0
+            state
+        else if low <= ema_144
+            state := 1
+            state
+        else
+            state := 0
+            state
+    else if state == 1
+        if close >= ema_12
+            vt_long := true
+            state := 0
+            state
+        else if ema_12 <= ema_144
+            state := 0
+            state
+else if long_short == 2
+    if state == 0
+        if high >= ema_144 and close <= ema_12
+            vt_short := true
+            state := 0
+            state
+        else if high >= ema_144
+            state := 1
+            state
+        else
+            state := 0
+            state
+    else if state == 1
+        if close <= ema_12
+            vt_short := true
+            state := 0
+            state
+        else if ema_12 >= ema_144
+            state := 0
+            state
+
+// Futures
+
+long           = VT ? vt_long  ? true : false : false
+short          = VT ? vt_short ? true : false : false
+long_style     = VT ? shape.triangleup   : shape.labelup
+short_style    = VT ? shape.triangledown : shape.labeldown
+long_col       = VT ? col_green : na
+short_col      = VT ? col_red   : na
+long_text_col  = VT ? col_green : na
+short_text_col = VT ? col_red   : na
+
+plotshape(long,  title='Long',  text='Long',  location=location.belowbar, style=long_style,  size=size.tiny, color=long_col,  textcolor=long_text_col)
+plotshape(short, title='Short', text='Short', location=location.abovebar, style=short_style, size=size.tiny, color=short_col, textcolor=short_text_col)
+
+////
+
+ma1_col = MA1 ? col_blue : col_green
+ma2_col = MA1 ? col_w    : col_blue
+ma3_col = MA2 or MA3 ? col_w : na
+
+ema1_col = EMA1 ? col_blue   : col_green
+ema2_col = EMA1 ? col_w      : col_blue
+ema3_col = EMA2 ? col_purple : EMA3 ? col_w  : na
+ema4_col = EMA3 ? col_purple : na
+
+ema_12_col  = long_short_col
+ema_21_col  = col_green
+ema_55_col  = col_white
+ema_144_col = esma(144)   > esma(169)   ? col_stl : col_sts
+ema_169_col = esma(144)   > esma(169)   ? color.new(col_stl, 100) : color.new(col_sts, 100)
+ema_576_col = esma_x(144) > esma_x(169) ? col_lgl : col_lgs
+ema_676_col = esma_x(144) > esma_x(169) ? color.new(col_lgl, 100) : color.new(col_lgs, 100)
+f_col_144   = VT ? esma(144)   > esma(169)   ? color.new(col_stl, 79) : color.new(col_sts, 79) : na
+f_col_576   = VT ? esma_x(144) > esma_x(169) ? color.new(col_lgl, 66) : color.new(col_lgs, 66) : na
+
+line_1_col = Fib ? col_up     : VT ? ema_12_col  : EMA ? ema1_col : MA ? ma1_col : na
+line_2_col = Fib ? col_green  : VT ? ema_21_col  : EMA ? ema2_col : MA ? ma2_col : na
+line_3_col = Fib ? col_34     : VT ? ema_55_col  : EMA ? ema3_col : MA ? ma3_col : na
+line_4_col = Fib ? col_white  : VT ? ema_144_col : EMA ? ema4_col : na
+line_5_col = Fib ? col_mo     : VT ? ema_169_col : na
+line_6_col = Fib ? col_blue   : VT ? ema_576_col : na
+line_7_col = Fib ? col_sr     : VT ? ema_676_col : na
+line_8_col = Fib ? col_purple : na
+line_9_col = Fib ? col_up     : na
+
+line_1_width = VT or Fib ? 1 : 2
+line_2_width = 2
+line_3_width = 2
+line_4_width = 2
+line_5_width = 2
+line_6_width = 2
+line_7_width = 2
+line_8_width = 2
+line_9_width = 2
+
+////
+
+ma1 = MA ? MA3 ? esma(30)  : MA2 ? esma(20)  : MA1 ? esma(50)  : esma(ma_len) : na 
+ma2 = MA ? MA3 ? esma(60)  : MA2 ? esma(50)  : MA1 ? esma(200) : na : na 
+ma3 = MA ? MA3 ? esma(120) : MA2 ? esma(200) : na : na
+
+ema1 = EMA ? EMA3 ? esma(15)  : EMA2 ? esma(8)  : EMA1 ? esma(8)  : esma(ma_len) : na 
+ema2 = EMA ? EMA3 ? esma(50)  : EMA2 ? esma(13) : EMA1 ? esma(21) : na : na 
+ema3 = EMA ? EMA3 ? esma(200) : EMA2 ? esma(21) : na : na
+ema4 = EMA ? EMA3 ? esma(800) : na : na
+
+line_1 = Fib ? esma_x(13)  : VT ? esma(12)  : EMA ? ema1 : MA ? ma1 : na
+line_2 = Fib ? esma_x(21)  : VT ? esma(21)  : EMA ? ema2 : MA ? ma2 : na
+line_3 = Fib ? esma_x(34)  : VT ? esma(55)  : EMA ? ema3 : MA ? ma3 : na
+line_4 = Fib ? esma_x(55)  : VT ? esma(144) : EMA ? ema4 : na
+line_5 = Fib ? esma_x(89)  : VT ? esma(169) : na
+line_6 = Fib ? esma_x(144) : VT ? ma_len != 1 ? esma_x(144) : na : na
+line_7 = Fib ? esma_x(233) : VT ? ma_len != 1 ? esma_x(169) : na : na
+line_8 = Fib ? esma_x(377) : na
+line_9 = Fib ? esma_x(610) : na
+
+L_1 = plot(line_1, color = line_1_col, title = 'line_1', linewidth = line_1_width, editable = false)
+L_2 = plot(line_2, color = line_2_col, title = 'line_2', linewidth = line_2_width, editable = false)
+L_3 = plot(line_3, color = line_3_col, title = 'line_3', linewidth = line_3_width, editable = false)
+L_4 = plot(line_4, color = line_4_col, title = 'line_4', linewidth = line_4_width, editable = false)
+L_5 = plot(line_5, color = line_5_col, title = 'line_5', linewidth = line_5_width, editable = false)
+L_6 = plot(line_6, color = line_6_col, title = 'line_6', linewidth = line_6_width, editable = false)
+L_7 = plot(line_7, color = line_7_col, title = 'line_7', linewidth = line_7_width, editable = false)
+L_8 = plot(line_8, color = line_8_col, title = 'line_8', linewidth = line_8_width, editable = false)
+L_9 = plot(line_9, color = line_9_col, title = 'line_9', linewidth = line_9_width, editable = false)
+
+fill(L_4, L_5, color=f_col_144, editable=false)
+fill(L_6, L_7, color=f_col_576, editable=false)
